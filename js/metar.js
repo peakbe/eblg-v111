@@ -5,9 +5,14 @@
 
 import { ENDPOINTS } from "./config.js";
 import { fetchJSON, updateStatusPanel } from "./helpers.js";
-import { getRunwayFromWind, RUNWAYS, computeCrosswind, drawRunway, drawCorridor, updateRunwayPanel } from "./runways.js";
-import { updateHeatmapDynamic } from "./sonometers.js";
-
+import { 
+    getRunwayFromWind, 
+    RUNWAYS, 
+    computeCrosswind, 
+    drawRunway, 
+    drawCorridor, 
+    updateRunwayPanel 
+} from "./runways.js";
 
 // ------------------------------------------------------
 // Logging PRO+
@@ -15,7 +20,6 @@ import { updateHeatmapDynamic } from "./sonometers.js";
 const IS_DEV = location.hostname.includes("localhost") || location.hostname.includes("127.0.0.1");
 const log = (...a) => IS_DEV && console.log("[METAR]", ...a);
 const logErr = (...a) => console.error("[METAR ERROR]", ...a);
-
 
 // ------------------------------------------------------
 // Chargement sécurisé
@@ -29,7 +33,6 @@ export async function safeLoadMetar() {
     }
 }
 
-
 // ------------------------------------------------------
 // Chargement brut
 // ------------------------------------------------------
@@ -39,9 +42,8 @@ export async function loadMetar() {
     updateStatusPanel("METAR", data);
 }
 
-
 // ------------------------------------------------------
-// Mise à jour UI + piste + heatmap
+// Mise à jour UI + piste
 // ------------------------------------------------------
 export function updateMetarUI(data) {
     const el = document.getElementById("metar");
@@ -60,14 +62,14 @@ export function updateMetarUI(data) {
     const windSpeed = data.wind_speed?.value;
 
     const runway = getRunwayFromWind(windDir);
-    const { crosswind } = computeCrosswind(windDir, windSpeed, RUNWAYS[runway]?.heading);
+    const { crosswind } = computeCrosswind(
+        windDir, 
+        windSpeed, 
+        RUNWAYS[runway]?.heading
+    );
 
     updateRunwayPanel(runway, windDir, windSpeed, crosswind);
 
     drawRunway(runway, window.runwayLayer);
     drawCorridor(runway, window.corridorLayer);
-
-    requestAnimationFrame(() => {
-        updateHeatmapDynamic(window.map, windDir, windSpeed, RUNWAYS[runway]?.heading);
-    });
 }
