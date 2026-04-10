@@ -21,3 +21,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     console.log("[APP] Carte prête. Modules chargés.");
 });
+
+// ============================
+// SIDEBAR TOGGLE PRO+
+// ============================
+
+const sidebar = document.getElementById("sidebar");
+const toggle = document.getElementById("sidebar-toggle");
+
+toggle.addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
+});
