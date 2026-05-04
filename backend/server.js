@@ -1,6 +1,8 @@
+// backend/server.js
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
+import { SONOMETERS } from "./sonometers-data.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,7 +17,95 @@ app.use(cors({
 }));
 
 // =========================
-// ROUTES API D’ABORD
+// CACHE PRO+ (60 sec)
+// =========================
+const cache = {
+    metar: { ts: 0, data: null },
+    taf: { ts: 0, data: null },
+    fids: { ts: 0, data: null }
+};
+
+function getCache(key, ttl = 60000) {
+    const now = Date.now();
+    if (cache[key].data && (now - cache[key].ts < ttl)) {
+        console.log("[CACHE HIT]", key);
+        return cache[key].data;
+    }
+    return null;
+}
+
+function setCache(key, data) {
+    cache[key].ts = Date.now();
+    cache[key].data = data;
+}
+
+// =========================
+// FETCH PRO+
+// =========================
+async function safeFetch(url) {
+    try {
+        console.log("[FETCH] →", url);
+        const res = await fetch(url);
+        console.log("[FETCH] STATUS:", res.status);
+
+        const text = await res.text();
+
+        if (!res.ok) {
+            console.error("[FETCH ERROR]", text);
+            return { fallback: true, status: res.status, body: text };
+        }
+
+        try {
+            return JSON.parse(text);
+        } catch (err) {
+            console.error("[FETCH PARSE ERROR]", err);
+            return { fallback: true, error: "Invalid JSON", raw: text };
+        }
+
+    } catch (err) {
+        console.error("[FETCH EXCEPTION]", err);
+        return { fallback: true, error: err.message };
+    }
+}
+
+// =========================
+// FIDS DYNAMIC GENERATOR
+// =========================
+function generateDynamicFids() {
+    const now = new Date();
+    const baseHour = now.getHours();
+    const pad = n => String(n).padStart(2, "0");
+
+    const flights = [
+        { flight: "QY123", destination: "LEJ" },
+        { flight: "X7182", destination: "TLV" },
+        { flight: "QR8962", destination: "DOH" },
+        { flight: "ET3721", destination: "ADD" },
+        { flight: "TK6543", destination: "IST" },
+        { flight: "3V450", destination: "CGN" },
+        { flight: "RU927", destination: "SVO" },
+        { flight: "K4972", destination: "CVG" }
+    ];
+
+    const statuses = ["Departed", "Boarding", "Loading", "Scheduled", "Delayed"];
+
+    return flights.map((f, i) => {
+        const hour = (baseHour + i) % 24;
+        const minute = (10 + i * 7) % 60;
+
+        return {
+            flight: f.flight,
+            destination: f.destination,
+            time: `${pad(hour)}:${pad(minute)}`,
+            status: statuses[i % statuses.length],
+            fallback: true,
+            timestamp: now.toISOString()
+        };
+    });
+}
+
+// =========================
+// API ROUTES (AVANT LE FRONTEND)
 // =========================
 
 // METAR
@@ -104,19 +194,17 @@ app.get("/fids", async (req, res) => {
 });
 
 // SONOMETERS
-import { SONOMETERS } from "./sonometers-data.js";
-
 app.get("/sonos", (req, res) => {
     res.json(SONOMETERS);
 });
 
 // =========================
-// ENSUITE SEULEMENT LE FRONTEND
+// SERVE STATIC FRONTEND
 // =========================
-app.use(express.static("."));          
-app.use(express.static("assets"));
-app.use(express.static("css"));
-app.use(express.static("js"));
+app.use(express.static(".."));      // racine (index.html, css, js, assets)
+app.use(express.static("../assets"));
+app.use(express.static("../css"));
+app.use(express.static("../js"));
 
 // =========================
 // START SERVER
