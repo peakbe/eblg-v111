@@ -1,3 +1,5 @@
+// backend/sonometers-data.js
+
 export const SONOMETERS = [
     { id: "F017", address: "Rue de la Pommeraie, 4690 Wonck, Belgique", lat: 50.764883, lon: 5.630606 },
     { id: "F001", address: "Rue Franquet, Houtain", lat: 50.738044, lon: 5.608833 },
