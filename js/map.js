@@ -3,7 +3,6 @@
 // =========================
 
 import { drawRunway, drawCorridor } from "./runways.js";
-import { initSonometers } from "./sonometers.js";
 
 let map = null;
 
@@ -40,10 +39,7 @@ export function initMap() {
         drawRunway("22", window.runwayLayer);
         drawCorridor("22", window.corridorLayer);
 
-        // Sonomètres
-        initSonometers(map);
-
-        console.log("[MAP] Carte initialisée avec succès.");
+            console.log("[MAP] Carte initialisée avec succès.");
         return map;
 
     } catch (err) {
