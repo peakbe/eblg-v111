@@ -1,129 +1,34 @@
 // ======================================================
-// RUNWAYS PRO+++ — EBLG Cockpit IFR
-// - Géométrie précise RWY 04/22
-// - Heading calculé automatiquement
-// - Vecteurs piste + normales pré-calculés
-// - Helpers pour corridor bruit & affichage
+// RUNWAYS.JS — Cockpit IFR PRO+++
+// - Données pistes EBLG
+// - Corridors IFR (approche + départ)
+// - Calcul vent (headwind / crosswind)
 // ======================================================
 
-// Coordonnées seuils (lat, lon) — EBLG
-const THR_22 = [50.63302, 5.46163]; // seuil 22 (SE)
-const THR_04 = [50.64594, 5.44321]; // seuil 04 (NW)
-
-// ------------------------------------------------------
-// Utils géométrie
-// ------------------------------------------------------
-function toRad(d) {
-    return d * Math.PI / 180;
-}
-
-function toDeg(r) {
-    return r * 180 / Math.PI;
-}
-
-// Heading géométrique (0–360) entre deux points lat/lon
-function computeHeading(from, to) {
-    const [lat1, lon1] = from.map(toRad);
-    const [lat2, lon2] = to.map(toRad);
-
-    const dLon = lon2 - lon1;
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x =
-        Math.cos(lat1) * Math.sin(lat2) -
-        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-    let brng = toDeg(Math.atan2(y, x));
-    brng = (brng + 360) % 360;
-    return brng;
-}
-
-// Vecteur piste normalisé (plan approximatif lat/lon)
-function computeUnitVector(from, to) {
-    const dx = to[1] - from[1]; // lon
-    const dy = to[0] - from[0]; // lat
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    return { ux: dx / len, uy: dy / len };
-}
-
-// Vecteur normal (gauche/droite) à la piste
-function computeNormals(ux, uy) {
-    return {
-        left:  { nx: -uy, ny: ux },
-        right: { nx:  uy, ny: -ux }
-    };
-}
-
-// ------------------------------------------------------
-// Export principal
-// ------------------------------------------------------
-const heading_22 = computeHeading(THR_22, THR_04); // ~040°
-const heading_04 = (heading_22 + 180) % 360;       // ~220°
-
-const vec_22 = computeUnitVector(THR_22, THR_04);
-const normals_22 = computeNormals(vec_22.ux, vec_22.uy);
-
-export const RUNWAYS = {
-    "22": {
-        id: "22",
-        start: THR_22,          // seuil 22
-        end: THR_04,            // seuil 04
-        heading: heading_22,    // ~40°
-        length_m: 3690,
-        unit: vec_22,           // vecteur piste (22→04)
-        normals: normals_22
-    },
+// ======================================================
+// DONNÉES PISTES
+// ======================================================
+const RUNWAYS = {
     "04": {
-        id: "04",
-        start: THR_04,          // seuil 04
-        end: THR_22,            // seuil 22
-        heading: heading_04,    // ~220°
-        length_m: 3690,
-        unit: { ux: -vec_22.ux, uy: -vec_22.uy }, // inverse
-        normals: normals_22
+        heading: 40,
+        threshold: [50.64590, 5.44380],
+        end:       [50.66220, 5.47600]
+    },
+    "22": {
+        heading: 220,
+        threshold: [50.66220, 5.47600],
+        end:       [50.64590, 5.44380]
     }
 };
 
-// ------------------------------------------------------
-// Helpers pour la carte / corridor
-// ------------------------------------------------------
-export function getRunway(runwayId) {
-    return RUNWAYS[runwayId] || null;
-}
-
-export function getRunwayFromWind(windDir) {
-    if (windDir == null) return null;
-    const diff = (a, b) => {
-        let d = Math.abs(a - b);
-        if (d > 180) d = 360 - d;
-        return d;
-    };
-
-    const d22 = diff(windDir, RUNWAYS["22"].heading);
-    const d04 = diff(windDir, RUNWAYS["04"].heading);
-
-    return d22 <= d04 ? RUNWAYS["22"] : RUNWAYS["04"];
-}
-
-export function computeCrosswind(windDir, windSpeed, rwyHeading) {
-    if (windDir == null || windSpeed == null || rwyHeading == null) {
-        return { crosswind: 0, headwind: 0 };
-    }
-
-    const angle = toRad(windDir - rwyHeading);
-    const headwind = Math.round(windSpeed * Math.cos(angle));
-    const crosswind = Math.round(windSpeed * Math.sin(angle));
-
-    return { crosswind, headwind };
-}
 // ======================================================
-// WIND COMPONENTS — PRO+++
+// CALCUL COMPOSANTES VENT — PRO+++
 // ======================================================
 export function computeWindComponents(windDir, windSpeed, runwayHeading) {
     if (windDir == null || windSpeed == null) {
         return { headwind: 0, crosswind: 0 };
     }
 
-    // Angle entre vent et axe piste
     const angle = ((windDir - runwayHeading + 360) % 360);
     const rad = angle * Math.PI / 180;
 
@@ -131,4 +36,58 @@ export function computeWindComponents(windDir, windSpeed, runwayHeading) {
     const crosswind = Math.round(windSpeed * Math.sin(rad));
 
     return { headwind, crosswind };
+}
+
+// ======================================================
+// CORRIDORS IFR — PRO+++
+// ======================================================
+export function getRunwayCorridors(rwy) {
+    const r = RUNWAYS[rwy];
+    if (!r) return null;
+
+    const th = r.threshold;
+    const hdg = r.heading;
+
+    // Vecteur direction piste
+    const rad = hdg * Math.PI / 180;
+    const dx = Math.cos(rad);
+    const dy = Math.sin(rad);
+
+    // Longueurs corridors (en degrés approx)
+    const APP_LEN = 0.045; // ~5 km
+    const DEP_LEN = 0.045;
+
+    // Largeur corridor
+    const HALF_WIDTH = 0.008; // ~900 m
+
+    // Points approche
+    const appStart = [
+        th[0] - dx * APP_LEN,
+        th[1] - dy * APP_LEN
+    ];
+
+    // Points départ
+    const depEnd = [
+        th[0] + dx * DEP_LEN,
+        th[1] + dy * DEP_LEN
+    ];
+
+    // Offset latéral (perpendiculaire)
+    const ox = -dy * HALF_WIDTH;
+    const oy = dx * HALF_WIDTH;
+
+    return {
+        approach: [
+            [appStart[0] - ox, appStart[1] - oy],
+            [th[0] - ox, th[1] - oy],
+            [th[0] + ox, th[1] + oy],
+            [appStart[0] + ox, appStart[1] + oy]
+        ],
+        departure: [
+            [th[0] - ox, th[1] - oy],
+            [depEnd[0] - ox, depEnd[1] - oy],
+            [depEnd[0] + ox, depEnd[1] + oy],
+            [th[0] + ox, th[1] + oy]
+        ]
+    };
 }
